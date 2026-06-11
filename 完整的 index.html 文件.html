@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>职场心情站</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+    .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .btn { padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .input { width: 100%; padding: 0.75rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; }
+    .input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const useLocalStorage = (key, initialValue) => {
+      const [value, setValue] = useState(() => {
+        try {
+          const item = window.localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch {
+          return initialValue;
+        }
+      });
+
+      useEffect(() => {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+          window.dispatchEvent(new Event('storage'));
+        } catch (error) {
+          console.error('保存数据失败:', error);
+        }
+      }, [key, value]);
+
+      return [value, setValue];
+    };
+
+    const App = () => {
+      const [currentUser, setCurrentUser] = useLocalStorage('currentUser', null);
+      const [username, setUsername] = useState('');
+      const [allUsers, setAllUsers] = useLocalStorage('allUsers', []);
+      const [moods, setMoods] = useLocalStorage('moods', []);
+      const [messages, setMessages] = useLocalStorage('messages', []);
+      const [buddies, setBuddies] = useLocalStorage('buddies', {});
+      const [activeTab, setActiveTab] = useState('mood');
+      const [selectedMood, setSelectedMood] = useState(null);
+      const [moodNote, setMoodNote] = useState('');
+      const [selectedBuddy, setSelectedBuddy] = useState(null);
+      const [messageInput, setMessageInput] = useState('');
+      const [newBuddyName, setNewBuddyName] = useState('');
+      const messagesEndRef = useRef(null);
+
+      const moodOptions = [
+        { label: '😊 开心', value: 5, color: 'bg-green-100 text-green-700' },
+        { label: '💖 充实', value: 4, color: 'bg-pink-100 text-pink-700' },
+        { label: '😐 一般', value: 3, color: 'bg-yellow-100 text-yellow-700' },
+        { label: '☕ 疲惫', value: 2, color: 'bg-orange-100 text-orange-700' },
+        { label: '😔 低落', value: 1, color: 'bg-gray-100 text-gray-700' },
+      ];
+
+      useEffect(() => {
+        const handleStorageChange = () => {
+          const storedMoods = localStorage.getItem('moods');
+          const storedMessages = localStorage.getItem('messages');
+          const storedUsers = localStorage.getItem('allUsers');
+          if (storedMoods) setMoods(JSON.parse(storedMoods));
+          if (storedMessages) setMessages(JSON.parse(storedMessages));
+          if (storedUsers) setAllUsers(JSON.parse(storedUsers));
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        const interval = setInterval(handleStorageChange, 2000);
+
+        return () => {
+          window.removeEventListener('storage', handleStorageChange);
+          clearInterval(interval);
+        };
+      }, []);
+
+      useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, selectedBuddy]);
+
+      const handleLogin = () => {
+        if (!username.trim()) return;
+        
+        const existingUser = allUsers.find(u => u.name === username);
+        if (existingUser) {
+          setCurrentUser(existingUser);
+        } else {
+          const newUser = {
+            id: Date.now().toString(),
+            name: username,
+            avatar: username[0].toUpperCase(),
+            joinDate: new Date().toISOString()
+          };
+          setAllUsers([...allUsers, newUser]);
+          setCurrentUser(newUser);
+          setBuddies({ ...buddies, [newUser.id]: [] });
+        }
+      };
+
+      const handleSaveMood = () => {
+        if (!selectedMood || !currentUser) return;
+
+        const newMood = {
+          id: Date.now().toString(),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          mood: selectedMood,
+          note: moodNote,
+          date: new Date().toISOString(),
+          timestamp: Date.now()
+        };
+
+        setMoods([...moods, newMood]);
+        setSelectedMood(null);
+        setMoodNote('');
+        alert('心情记录成功！✨');
+      };
+
+      const handleAddBuddy = () => {
+        if (!newBuddyName.trim() || !currentUser) return;
+
+        const buddy = allUsers.find(u => u.name === newBuddyName && u.id !== currentUser.id);
+        if (!buddy) {
+          alert('找不到这个用户，请确认用户名');
+          return;
+        }
+
+        const currentBuddies = buddies[currentUser.id] || [];
+        if (currentBuddies.includes(buddy.id)) {
+          alert('已经是你的搭子了！');
+          return;
+        }
+
+        setBuddies({
+          ...buddies,
+          [currentUser.id]: [...currentBuddies, buddy.id]
+        });
+        setNewBuddyName('');
+        alert(`成功添加 ${buddy.name} 为搭子！🎉`);
+      };
+
+      const handleSendMessage = () => {
+        if (!messageInput.trim() || !selectedBuddy || !currentUser) return;
+
+        const newMessage = {
+          id: Date.now().toString(),
+          from: currentUser.id,
+          to: selectedBuddy.id,
+          text: messageInput,
+          timestamp: Date.now(),
+          date: new Date().toISOString()
+        };
+
+        setMessages([...messages, newMessage]);
+        setMessageInput('');
+      };
+
+      const getCurrentUserBuddies = () => {
+        if (!currentUser) return [];
+        const buddyIds = buddies[currentUser.id] || [];
+        return allUsers.filter(u => buddyIds.includes(u.id));
+      };
+
+      const getChatMessages = (buddyId) => {
+        if (!currentUser) return [];
+        return messages
+          .filter(m => 
+            (m.from === currentUser.id && m.to === buddyId) ||
+            (m.from === buddyId && m.to === currentUser.id)
+          )
+          .sort((a, b) => a.timestamp - b.timestamp);
+      };
+
+      const getCheckInStreak = () => {
+        if (!currentUser) return 0;
+        return moods.filter(m => m.userId === currentUser.id).length;
+      };
+
+      const getBuddyMoods = () => {
+        if (!currentUser) return [];
+        const buddyIds = buddies[currentUser.id] || [];
+        return moods
+          .filter(m => buddyIds.includes(m.userId))
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 10);
+      };
+
+      if (!currentUser) {
+        return (
+          <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #dbeafe, #fae8ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div className="card" style={{ width: '100%', maxWidth: '28rem', padding: '2rem' }}>
+              <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', marginBottom: '0.5rem' }}>职场心情站</h1>
+              <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>记录每一天，与搭子同行</p>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>输入你的昵称</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                  placeholder="例如：小明"
+                  className="input"
+                />
+              </div>
+              <button onClick={handleLogin} className="btn btn-primary" style={{ width: '100%' }}>
+                进入应用
+              </button>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', marginTop: '1rem' }}>
+                首次使用会自动创建账号<br/>
+                当前在线用户：{allUsers.length} 人
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #dbeafe, #fae8ff)', padding: '1rem' }}>
+          <div style={{ maxWidth: '80rem', margin: '0 auto' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1f2937' }}>职场心情站</h1>
+                <p style={{ color: '#6b7280' }}>欢迎回来，{currentUser.name}！</p>
+              </div>
+              <button onClick={() => setCurrentUser(null)} className="btn" style={{ background: 'white', border: '1px solid #e5e7eb' }}>
+                退出
+              </button>
+            </header>
+
+            <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', background: 'white', padding: '0.25rem', borderRadius: '0.5rem' }}>
+              {['mood', 'buddies', 'chat'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '0.375rem',
+                    background: activeTab === tab ? '#3b82f6' : 'transparent',
+                    color: activeTab === tab ? 'white' : '#6b7280',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  {tab === 'mood' ? '心情记录' : tab === 'buddies' ? '搭子动态' : '聊天'}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'mood' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>📅 今天的心情如何？</h2>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    {moodOptions.map((mood) => (
+                      <button
+                        key={mood.value}
+                        onClick={() => setSelectedMood(mood.value)}
+                        style={{
+                          padding: '1rem',
+                          borderRadius: '0.5rem',
+                          border: selectedMood === mood.value ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                          background: selectedMood === mood.value ? '#eff6ff' : 'white',
+                          cursor: 'pointer',
+                          fontSize: '0.875rem',
+                          fontWeight: '500'
+                        }}
+                      >
+                        {mood.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={moodNote}
+                    onChange={(e) => setMoodNote(e.target.value)}
+                    placeholder="写下今天的感受..."
+                    className="input"
+                    style={{ marginBottom: '0.75rem', minHeight: '5rem', resize: 'vertical' }}
+                  />
+                  <button onClick={handleSaveMood} className="btn btn-primary" style={{ width: '100%' }}>
+                    记录今天
+                  </button>
+                </div>
+
+                <div className="card" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>🏆 坚持打卡</h2>
+                  <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#3b82f6', marginBottom: '0.5rem' }}>
+                    {getCheckInStreak()}
+                  </div>
+                  <p style={{ color: '#6b7280' }}>总记录天数</p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'buddies' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>➕ 添加搭子</h2>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      value={newBuddyName}
+                      onChange={(e) => setNewBuddyName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddBuddy()}
+                      placeholder="输入搭子的昵称"
+                      className="input"
+                      style={{ flex: 1 }}
+                    />
+                    <button onClick={handleAddBuddy} className="btn btn-primary">
+                      添加
+                    </button>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#6b7280' }}>
+                    👥 平台用户：{allUsers.filter(u => u.id !== currentUser.id).map(u => u.name).join('、') || '暂无其他用户'}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: '1.5rem' }}>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem' }}>搭子动态</h2>
+                  {getBuddyMoods().length > 0 ? (
+                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                      {getBuddyMoods().map((mood) => {
+                        const moodOption = moodOptions.find(m => m.value === mood.mood);
+                        return (
+                          <div key={mood.id} style={{ padding: '0.75rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'start', gap: '0.75rem' }}>
+                              <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '9999px', background: 'linear-gradient(to bottom right, #60a5fa, #a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', flexShrink: 0 }}>
+                                {mood.userName[0]}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                  <span style={{ fontWeight: 'bold' }}>{mood.userName}</span>
+                                  <span>{moodOption?.label}</span>
+                                  <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                    {new Date(mood.date).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                {mood.note && <p style={{ fontSize: '0.875rem', color: '#374151' }}>{mood.note}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                      还没有搭子动态，快去添加搭子吧！
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'chat' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1rem' }}>
+                  <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>💬 我的搭子</h2>
+                  {getCurrentUserBuddies().length > 0 ? (
+                    <div style={{ display: 'grid', gap: '0.5rem' }}>
+                      {getCurrentUserBuddies().map((buddy) => (
+                        <button
+                          key={buddy.id}
+                          onClick={() => setSelectedBuddy(buddy)}
+                          style={{
+                            padding: '0.75rem',
+                            textAlign: 'left',
+                            background: selectedBuddy?.id === buddy.id ? '#eff6ff' : 'white',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem'
+                          }}
+                        >
+                          <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '9999px', background: 'linear-gradient(to bottom right, #60a5fa, #a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>
+                            {buddy.avatar}
+                          </div>
+                          <div style={{ fontWeight: 'bold' }}>{buddy.name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280', fontSize: '0.875rem' }}>
+                      还没有搭子<br/>去"搭子动态"添加吧！
+                    </div>
+                  )}
+                </div>
+
+                <div className="card" style={{ padding: '1rem' }}>
+                  <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+                    {selectedBuddy ? `与 ${selectedBuddy.name} 的聊天` : '选择一个搭子开始聊天'}
+                  </h2>
+                  {selectedBuddy ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '24rem' }}>
+                      <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem', padding: '0.5rem' }}>
+                        {getChatMessages(selectedBuddy.id).map((msg) => {
+                          const isMe = msg.from === currentUser.id;
+                          return (
+                            <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: '0.75rem' }}>
+                              <div style={{
+                                maxWidth: '75%',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '0.75rem',
+                                background: isMe ? '#3b82f6' : '#f3f4f6',
+                                color: isMe ? 'white' : '#1f2937'
+                              }}>
+                                <p style={{ fontSize: '0.875rem' }}>{msg.text}</p>
+                                <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', opacity: 0.7 }}>
+                                  {new Date(msg.date).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div ref={messagesEndRef} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input
+                          type="text"
+                          value={messageInput}
+                          onChange={(e) => setMessageInput(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                          placeholder="输入消息..."
+                          className="input"
+                          style={{ flex: 1 }}
+                        />
+                        <button onClick={handleSendMessage} className="btn btn-primary">
+                          发送
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ height: '24rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d1d5db', fontSize: '4rem' }}>
+                      💬
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
